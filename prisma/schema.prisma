@@ -1,0 +1,200 @@
+// prisma/schema.prisma
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  CASHIER
+  WAITER
+  KITCHEN
+  STORE
+  PURCHASE
+  HR
+  STAFF
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  APPROVED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum StockMoveType {
+  PURCHASE
+  CONSUMPTION
+  WASTAGE
+  ADJUSTMENT
+  RETURN
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  OTHER
+}
+
+//////////////////////////////////////////////////////
+// USERS
+//////////////////////////////////////////////////////
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  phone        String?  @unique
+  passwordHash String
+  role         Role     @default(STAFF)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+//////////////////////////////////////////////////////
+// SUPPLIERS
+//////////////////////////////////////////////////////
+
+model Supplier {
+  id             String            @id @default(uuid())
+  name           String
+  email          String?
+  phone          String?
+  address        String?
+  gstNumber      String?
+  metadata       Json?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
+  payments       SupplierPayment[]
+}
+
+//////////////////////////////////////////////////////
+// INVENTORY ITEMS
+//////////////////////////////////////////////////////
+
+model InventoryItem {
+  id             String            @id @default(uuid())
+  name           String
+  sku            String?           @unique
+  unit           String
+  minStockLevel  Decimal?          @db.Decimal(12,3)
+  metadata       Json?
+  isActive       Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  batches        InventoryBatch[]
+  stockItem      StockItem?
+}
+
+//////////////////////////////////////////////////////
+// PURCHASE ORDER
+//////////////////////////////////////////////////////
+
+model PurchaseOrder {
+  id             String                @id @default(uuid())
+  supplier       Supplier              @relation(fields: [supplierId], references: [id])
+  supplierId     String
+  status         PurchaseOrderStatus   @default(DRAFT)
+  orderDate      DateTime              @default(now())
+  expectedDate   DateTime?
+  notes          String?
+  items          Json?                 // [{ inventoryItemId, quantity, price }]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  goodsReceipts  GoodsReceipt[]
+}
+
+//////////////////////////////////////////////////////
+// GOODS RECEIPT (GRN)
+//////////////////////////////////////////////////////
+
+model GoodsReceipt {
+  id              String           @id @default(uuid())
+  supplier        Supplier         @relation(fields: [supplierId], references: [id])
+  supplierId      String
+  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id])
+  purchaseOrderId String?
+  receiptNumber   String?          @unique
+  isDirect        Boolean          @default(false)
+  receivedDate    DateTime         @default(now())
+  remarks         String?
+  items           Json             // [{ inventoryItemId, qty, costPrice, expiry }]
+  metadata        Json?
+  createdAt       DateTime         @default(now())
+}
+
+//////////////////////////////////////////////////////
+// BATCHES
+//////////////////////////////////////////////////////
+
+model InventoryBatch {
+  id              String         @id @default(uuid())
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String
+  batchNumber     String
+  costPrice       Decimal        @db.Decimal(10,2)
+  quantity        Decimal        @db.Decimal(12,3)
+  expiryDate      DateTime?
+  createdAt       DateTime       @default(now())
+}
+
+//////////////////////////////////////////////////////
+// STOCK
+//////////////////////////////////////////////////////
+
+model StockItem {
+  id              String         @id @default(uuid())
+  inventoryItem   InventoryItem  @relation(fields: [inventoryItemId], references: [id])
+  inventoryItemId String @unique
+  quantity        Decimal        @db.Decimal(12,3)
+  metadata        Json?
+  updatedAt       DateTime       @updatedAt
+
+  movements       StockMovement[]
+}
+
+model StockMovement {
+  id              String         @id @default(uuid())
+  stockItem       StockItem      @relation(fields: [stockItemId], references: [id])
+  stockItemId     String
+  type            StockMoveType
+  quantity        Decimal        @db.Decimal(12,3)
+  reference       String?
+  extra           Json?
+  createdAt       DateTime       @default(now())
+}
+
+//////////////////////////////////////////////////////
+// SUPPLIER PAYMENTS
+//////////////////////////////////////////////////////
+
+model SupplierPayment {
+  id              String      @id @default(uuid())
+  supplier        Supplier     @relation(fields: [supplierId], references: [id])
+  supplierId      String
+  amount          Decimal      @db.Decimal(12,2)
+  method          PaymentMethod
+  reference       String?
+  notes           String?
+  metadata        Json?
+  paidAt          DateTime     @default(now())
+
+  purchaseOrderId String?
+  goodsReceiptId  String?
+}
