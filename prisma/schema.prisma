@@ -59,6 +59,8 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  orders    Order[]   @relation()
 }
 
 //////////////////////////////////////////////////////
@@ -198,3 +200,163 @@ model SupplierPayment {
   purchaseOrderId String?
   goodsReceiptId  String?
 }
+
+// ===================== POS ENUMS =====================
+
+enum TableStatus {
+  AVAILABLE
+  OCCUPIED
+  RESERVED
+  BLOCKED
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  IN_KITCHEN
+  READY
+  SERVED
+  DELIVERED
+  CANCELLED
+  CLOSED
+}
+
+enum KOTStatus {
+  PENDING
+  IN_PROGRESS
+  READY
+}
+
+// ===================== MENU =====================
+
+model MenuCategory {
+  id        String       @id @default(uuid())
+  name      String
+  sortOrder Int          @default(0)
+  isActive  Boolean      @default(true)
+  metadata  Json?
+
+  items     MenuItem[]
+}
+
+model MenuItem {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  basePrice   Decimal      @db.Decimal(10,2)
+  isActive    Boolean      @default(true)
+  isVeg       Boolean?
+  taxRate     Decimal?     @db.Decimal(5,2)
+  metadata    Json?        // variants, addons, tags etc.
+
+  category    MenuCategory @relation(fields: [categoryId], references: [id])
+  recipe      Recipe?
+  categoryId  String
+}
+
+// ===================== TABLES =====================
+
+model Table {
+  id        String       @id @default(uuid())
+  name      String
+  capacity  Int?
+  status    TableStatus  @default(AVAILABLE)
+  metadata  Json?
+
+  orders    Order[]
+}
+
+// ===================== ORDERS / POS =====================
+
+model Order {
+  id           String      @id @default(uuid())
+  orderNumber  String?     @unique
+  orderType    OrderType
+  status       OrderStatus @default(NEW)
+
+  table        Table?      @relation(fields: [tableId], references: [id])
+  tableId      String?
+
+  customerName String?
+  customerPhone String?
+  items        Json        // [{ menuItemId, name, qty, unitPrice, totalPrice, notes, status }]
+  subTotal     Decimal     @db.Decimal(12,2)
+  taxAmount    Decimal     @db.Decimal(12,2)
+  serviceCharge Decimal    @db.Decimal(12,2)
+  discountAmount Decimal   @db.Decimal(12,2)
+  grandTotal   Decimal     @db.Decimal(12,2)
+
+  createdBy    User?       @relation(fields: [createdById], references: [id])
+  createdById  String?
+  closedAt     DateTime?
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  bills        PosBill[]
+  kotTickets   KOT[]
+  payments     PosPayment[]
+}
+
+// ===================== KITCHEN KOT =====================
+
+model KOT {
+  id         String     @id @default(uuid())
+  order      Order      @relation(fields: [orderId], references: [id])
+  orderId    String
+  status     KOTStatus  @default(PENDING)
+  items      Json       // subset of order items or same structure
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+// ===================== POS BILLING =====================
+
+model PosBill {
+  id            String    @id @default(uuid())
+  billNumber    String    @unique
+  order         Order     @relation(fields: [orderId], references: [id])
+  orderId       String
+
+  subTotal      Decimal   @db.Decimal(12,2)
+  taxAmount     Decimal   @db.Decimal(12,2)
+  serviceCharge Decimal   @db.Decimal(12,2)
+  discountAmount Decimal  @db.Decimal(12,2)
+  grandTotal    Decimal   @db.Decimal(12,2)
+
+  createdAt     DateTime  @default(now())
+  metadata      Json?
+
+  payments      PosPayment[]
+}
+
+// POS payments (customer-facing, separate from SupplierPayment)
+model PosPayment {
+  id          String        @id @default(uuid())
+  order       Order         @relation(fields: [orderId], references: [id])
+  orderId     String
+  bill        PosBill?      @relation(fields: [billId], references: [id])
+  billId      String?
+
+  amount      Decimal       @db.Decimal(12,2)
+  method      PaymentMethod // reusing the same enum is fine: CASH, CARD, UPI, etc.
+  reference   String?
+  metadata    Json?
+  paidAt      DateTime      @default(now())
+}
+
+model Recipe {
+  id             String        @id @default(uuid())
+  menuItem       MenuItem      @relation(fields: [menuItemId], references: [id])
+  menuItemId     String        @unique
+  ingredients    Json
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
