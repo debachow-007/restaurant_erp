@@ -8,6 +8,9 @@ import suppliersRoutes from "./suppliers.routes.js";
 import purchaseOrdersRoutes from "./purchaseOrders.routes.js";
 import grnRoutes from "./grn.routes.js";
 import supplierPaymentsRoutes from "./supplierPayments.routes.js";
+import authRoutes from "./auth.routes.js";
+import { Router } from "express";
+
 
 const router = Router();
 
